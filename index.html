@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <title>Gerador de Evento</title>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(function (registration) {
+                    console.log('Service Worker registered with scope:', registration.scope);
+                })
+                .catch(function (error) {
+                    console.error('Service Worker registration failed:', error);
+                });
+        }
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <h2>Detalhes do Evento</h2>
+        <form id="eventForm">
+            <div class="input-field">
+                <input type="text" id="eventTitle" name="eventTitle" required>
+                <label for="eventTitle">Título do Evento</label>
+            </div>
+            <div class="input-field">
+                <input type="text" id="description" name="description" required>
+                <label for="description">Descrição</label>
+            </div>
+            <div class="input-field">
+                <input type="datetime-local" id="startDate" name="startDate" required>
+                <label for="startDate">Data e Hora de Início</label>
+            </div>
+            <div class="input-field">
+                <input type="datetime-local" id="endDate" name="endDate" required>
+                <label for="endDate">Data e Hora de Término</label>
+            </div>
+            <div class="input-field">
+                <input type="text" id="location" name="location" required>
+                <label for="location">Local</label>
+            </div>
+            <div class="input-field" style="display: none;">
+                <input type="url" id="url" name="url" required>
+                <label for="url">URL</label>
+            </div>
+            <button class="btn waves-effect waves-light" type="button" id="downloadButton">Baixar</button>
+            <button class="btn waves-effect waves-light" type="button" id="shareButton">Compartilhar</button>
+
+            <button class="btn waves-effect waves-light" onclick="installPWA()">Instalar Aplicativo</button>
+        </form>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/dayjs.min.js"></script>
+
+    <script>
+        function installPWA() {
+            if ('beforeinstallprompt' in window) {
+                const installPrompt = window.beforeinstallprompt;
+
+                installPrompt.prompt();
+
+                installPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    } else {
+                        console.log('User dismissed the install prompt');
+                    }
+                });
+            }
+        }
+    </script>
+
+    <script>
+        const DATE_FORMAT = 'YYYY-MM-DDTHH:mm';
+        const ICS_DATE_FORMAT = 'YYYYMMDDTHHmmss';
+
+        function dateToIcsFormat(date) {
+            return dayjs(date).format(ICS_DATE_FORMAT)
+        }
+
+        function generateICS(data) {
+            const { eventTitle, startDate, endDate, location, url, description } = data
+            const icsData = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//ical.marudot.com//iCal Event Maker
+CALSCALE:GREGORIAN
+BEGIN:VTIMEZONE
+TZID:America/Sao_Paulo
+LAST-MODIFIED:${dateToIcsFormat(new Date())}
+TZURL:https://www.tzurl.org/zoneinfo-outlook/America/Sao_Paulo
+X-LIC-LOCATION:America/Sao_Paulo
+BEGIN:STANDARD
+TZNAME:-03
+TZOFFSETFROM:-0300
+TZOFFSETTO:-0300
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTAMP:${dateToIcsFormat(new Date())}
+UID:${crypto.randomUUID()}
+DTSTART;TZID=America/Sao_Paulo:${dateToIcsFormat(startDate)}
+DTEND;TZID=America/Sao_Paulo:${dateToIcsFormat(endDate)}
+SUMMARY:${eventTitle}
+URL:${url}
+DESCRIPTION:${description}
+LOCATION:${location}
+END:VEVENT
+END:VCALENDAR
+`;
+            return icsData;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Define os valores padrão para os campos do formulário
+
+            const startDate = dayjs().set('hour', 9).set('minute', 0).format(DATE_FORMAT);
+            const endDate = dayjs().set('hour', 10).set('minute', 0).format(DATE_FORMAT);
+
+            document.getElementById('eventTitle').value = 'Título do Evento';
+            document.getElementById('description').value = 'Descrição do Evento';
+            document.getElementById('startDate').value = startDate;
+            document.getElementById('endDate').value = endDate;
+            document.getElementById('location').value = 'Local do Evento';
+            document.getElementById('url').value = '';
+
+            // Set the "active" class for all labels
+            const labels = document.querySelectorAll('label');
+            labels.forEach(label => {
+                label.classList.add('active');
+            });
+
+            document.getElementById('shareButton').addEventListener('click', function () {
+                if (navigator.share) {
+                    const eventTitle = document.getElementById('eventTitle').value;
+                    const startDate = document.getElementById('startDate').value;
+                    const endDate = document.getElementById('endDate').value;
+                    const location = document.getElementById('location').value;
+                    const url = document.getElementById('url').value;
+
+                    // Generate the .ics content
+                    const icsContent = generateICS(eventTitle, startDate, endDate, location, url);
+
+                    // Create a Blob from the .ics content
+                    const blob = new Blob([icsContent], { type: 'text/calendar' });
+
+                    // Create the share data
+                    const shareData = {
+                        title: 'Event Details',
+                        text: 'Check out this event:',
+                        files: [new File([blob], 'event.ics', { type: 'text/calendar' })]
+                    };
+
+                    // Share the .ics file
+                    navigator.share(shareData)
+                        .then(() => console.log('Shared successfully'))
+                        .catch((error) => console.error('Error sharing:', error));
+                } else {
+                    alert('Web Share API is not supported on this browser.');
+                }
+            });
+        });
+
+
+
+        $(document).ready(function () {
+            // Initialize Materialize CSS components
+            M.AutoInit();
+
+            // Handle the download button click
+            $('#downloadButton').click(function () {
+                // Get form data
+                const formData = {
+                    eventTitle: $('#eventTitle').val(),
+                    description: $('#description').val(),
+                    startDate: $('#startDate').val(),
+                    endDate: $('#endDate').val(),
+                    location: $('#location').val(),
+                    url: $('#url').val()
+                };
+
+                const icsData = generateICS(formData);
+
+                // Convert form data to a string
+                const dataString = icsData
+
+                // Create a Blob containing the data
+                const blob = new Blob([dataString], { type: 'text/calendar' });
+
+                // Create a download link and trigger the click
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `${formData.eventTitle}.ics`;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+        });
+    </script>
+</body>
+
+</html>
